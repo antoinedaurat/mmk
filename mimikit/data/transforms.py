@@ -11,10 +11,20 @@ def stft(file, n_fft=N_FFT, hop_length=HOP_LENGTH, sr=SR):
     y, sr = librosa.load(file, sr=sr)
     fft = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
     # returns the feature and its attributes
-    return fft, dict(n_fft=n_fft, hop_length=hop_length, sr=sr)
+    attrs = dict(n_fft=n_fft, 
+                 hop_length=hop_length, 
+                 sr=sr,
+                 stft_implementation='librosa',
+                 center=True,
+                 window='hann',
+                 win_length=n_fft,
+                 normalization='none',
+                 zp_window=False,
+                 )
+    return fft, attrs
 
 
-def file_to_fft(abs_path, n_fft=N_FFT, hop_length=HOP_LENGTH, sr=SR):
+def file_to_stft_mag(abs_path, n_fft=N_FFT, hop_length=HOP_LENGTH, sr=SR):
     fft, params = stft(abs_path, n_fft, hop_length, sr)
     fft = abs(fft)
     metadata = Metadata.from_duration([fft.shape[1]])
@@ -36,4 +46,4 @@ def file_to_qx(abs_path, mu=MU, sr=SR):
     return dict(qx=(params, qx.reshape(-1, 1)), metadata=({}, metadata))
 
 
-default_extract_func = file_to_fft
+default_extract_func = file_to_stft_mag
