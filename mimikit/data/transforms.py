@@ -24,7 +24,7 @@ def stft(file, n_fft=N_FFT, hop_length=HOP_LENGTH, sr=SR):
     return fft, attrs
 
 
-def file_to_stft_mag(abs_path, n_fft=N_FFT, hop_length=HOP_LENGTH, sr=SR):
+def file_to_fft(abs_path, n_fft=N_FFT, hop_length=HOP_LENGTH, sr=SR):
     fft, params = stft(abs_path, n_fft, hop_length, sr)
     fft = abs(fft)
     metadata = Metadata.from_duration([fft.shape[1]])
@@ -46,4 +46,4 @@ def file_to_qx(abs_path, mu=MU, sr=SR):
     return dict(qx=(params, qx.reshape(-1, 1)), metadata=({}, metadata))
 
 
-default_extract_func = file_to_stft_mag
+default_extract_func = file_to_fft
