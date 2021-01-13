@@ -60,7 +60,7 @@ def find_short_trajectory(X, original, dists, indices, n_trial_pathes=16):
             delinds = [i for i, x in enumerate(cumdist) if x == maxelt]
             errors = [((original_log[:, indices[k, traj[i][-1]]] - X_log[:, k])**2).sum() for i in delinds]
             nleft = len(cumdist) - n_trial_pathes
-            order = sorted(range(len(errors)), key=lambda k: errors[k])[:nleft]
+            order = sorted(range(len(errors)), key=lambda k: errors[k])[-nleft:]
             for o in sorted(order, reverse=True):
                 id = delinds[o]
                 del cumdist[id]
