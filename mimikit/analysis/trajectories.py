@@ -34,9 +34,9 @@ def find_short_trajectory(X, original, dists, indices, n_trial_pathes=16):
     Returns
     -------
     traj : list
-        A list with found trajectories
+        The found trajectory
     dists : list
-        Distances traveled for each trajectory
+        Distances traveled for trajectory
 
     """
     tdiffs = np.array([(indices[1:] - indices[:-1,k:k+1]) for k in range(indices.shape[-1])])
@@ -75,5 +75,5 @@ def find_short_trajectory(X, original, dists, indices, n_trial_pathes=16):
             dist = tdiffs[prev, k, i1]
             newpath.append(i1)
             cumdist.append(curdist + abs(dist))
-    return traj, cumdist
+    return traj[0], cumdist[0]
 
