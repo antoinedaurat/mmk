@@ -7,13 +7,7 @@ def distance_to_nnbrs(x, y, k=4):
     Find k nearest neighbors in y for each frame in x.
     """
     nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(y)
-    nframes = x.shape[0]
-    dists = np.empty((nframes, k))
-    inds = np.empty((nframes, k), dtype=np.int)
-    for k in range(nframes):
-        d, i = nbrs.kneighbors(x[k:k+1])
-        dists[k] = d[0]
-        inds[k] = i[0]
+    dists, inds = nbrs.kneighbors(x)
     return dists, inds
 
 
