@@ -94,12 +94,13 @@ def wnchoice(array, weights):
 # a list of frames (parents)
 
 class SCRoutine:
-    def __init__(self, rout):
+    def __init__(self, rout, override_inval=None):
         if isinstance(rout, numbers.Number):
             rout = Pconst(rout)
         self.stack = []
         self.rout = rout
         self.inval = None
+        self.override_inval = override_inval
         self.gen = rout.generator(self)
 
     def __iter__(self):
@@ -117,7 +118,7 @@ class SCRoutine:
         return res
 
     def __next__(self):
-        return self.next()
+        return self.next(self.override_inval)
 
     def next(self, val=None):
         self.inval = val
@@ -244,6 +245,22 @@ class Pseq(Pattern):
                 item = self.lst[(i + offsetValue) % lsize]
                 yield embedInStream(rout, item)
             counter = counter + 1
+        yield None
+        yield rout.inval
+
+
+class Pn(Pattern):
+    def __init__(self, val, repeats=1):
+        Pattern.__init__(self)
+        self.val = val
+        self.repeats = repeats
+
+    # this is equivalent to the embedInStream function
+    def generator(self, rout):
+        counter = 0
+        reps = patvalue(self.repeats)
+        for _ in range(reps):
+                yield embedInStream(rout, self.val)
         yield None
         yield rout.inval
 
@@ -685,14 +702,18 @@ class Event:
             return res
 
     def copy(self):
-        self.map = copy.copy(self.map)
-        return copy.copy(self)
+        cp = copy.copy(self)
+        cp.map = copy.copy(self.map)
+        return cp
 
 
 class Pbind(Pattern):
     def __init__(self, *args):
         Pattern.__init__(self)
         self.patternpairs = args
+
+    def asStream(self, override_inval=None):
+        return SCRoutine(self, override_inval)
 
     def generator(self, rout):
         streampairs = list(self.patternpairs)
@@ -813,7 +834,7 @@ class Pbind(Pattern):
 # pst = pb.asStream()
 # pst.next(Event({}))
 
-pb = Pbind('type', 'model',   'model', Prand([0,1,2], inf), 'dur', Pseq([0.5, 1.0], inf))
-pst = pb.asStream()
-pst.next(Event({}))
+#pb = Pbind('type', 'model',   'model', Prand([0,1,2], inf), 'dur', Pseq([0.5, 1.0], inf))
+#pst = pb.asStream({})
+#pst.next(Event({}))
 

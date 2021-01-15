@@ -2,10 +2,11 @@ import librosa
 import soundfile as sf
 import torch
 import numpy as np
-from pbind import Event
+from .pbind import Event
 
 
-Event.default_parent = {'n_frames': lambda ev: ev['dur'] * ev['srate'] / ev['hop_size'],
+Event.default_parent = {'n_frames': lambda ev: round(ev['dur'] * ev['srate'] / ev['hop_size']),
+                        'start_frame': lambda ev: round(ev['start'] * ev['srate'] / ev['hop_size']),
                         'srate': 22050,
                         'hop_size': 512
                         }
@@ -13,7 +14,7 @@ Event.default_parent = {'n_frames': lambda ev: ev['dur'] * ev['srate'] / ev['hop
 
 class AREnsembleGenerator:
     """
-    Class for generating audio data from multiple trained auto-regressive models.
+    Generation of audio data from multiple trained auto-regressive models.
     The class uses Pbind patterns to control the model selection and generation parameters.
     """
 
@@ -38,6 +39,7 @@ class AREnsembleGenerator:
         self.time = 0.0
         self.prompt_data = prompt_data
         self.max_time = max_time
+        self.num_bins = prompt_data.shape[-1]
         if tensor_api == 'torch':
             self.noise_fn = torch.randn
             self.cat_fn = lambda x: torch.cat(x, 1)
@@ -57,22 +59,30 @@ class AREnsembleGenerator:
             m.eval()
             m.to(device)
 
-    def generate(self, start_event = Event({})):
+    def generate(self, time_domain=True, hop_size=512, start_event = Event({})):
         stream = self.pattern.asStream()
         while self.time < self.max_time:
             event = stream.next(start_event)
             event_type = event['type']
             getattr(self, event_type)(event)
-        return self.output
+        res = librosa.griffinlim(self.output.cpu().numpy()[0].T, 64, hop_size)
+        return res
 
-    def append_frames(self, event):
-        frames = event['frames']
+    def insert(self, event):
+        n_frames = event.value('n_frames')
+        frames = event['data']
+        self.output = self.cat_fn([self.output, self.convert_fn(frames)])
+        self.time += n_frames * event['hop_size'] / event['srate']
+
+    def rest(self, event):
+        n_frames = event.value('n_frames')
+        frames = self.zeros_fn((1, n_frames, self.num_bins))
         self.output = self.cat_fn([self.output, self.convert_fn(frames)])
         self.time += n_frames * event['hop_size'] / event['srate']
 
     def prompt(self, event):
         n_frames = event.value('n_frames')
-        start_frame = event.value('start')
+        start_frame = event.value('start_frame')
         data = event['data'][start_frame:start_frame + n_frames]
         self.output = self.cat_fn([self.output, self.convert_fn(data)])
         self.time += n_frames * event['hop_size'] / event['srate']
