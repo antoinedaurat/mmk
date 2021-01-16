@@ -249,6 +249,34 @@ class Pseq(Pattern):
         yield rout.inval
 
 
+class Ptuple(Pattern):
+    def __init__(self, lst, repeats=1):
+        Pattern.__init__(self)
+        self.lst = lst
+        self.repeats = repeats
+
+    def generator(self, rout):
+        counter = 0
+        reps = patvalue(self.repeats)
+        while counter < reps:
+            streams = [patify(item).asStream() for item in self.lst]
+            saw_nil = False
+            while not saw_nil:
+                tup = []
+                inval = rout.inval
+                for s in streams:
+                    outval = s.next(inval)
+                    if outval is None:
+                        saw_nil = True
+                        break
+                    tup.append(outval)
+                if not saw_nil:
+                    yield tup
+            counter = counter + 1
+        yield None
+        yield rout.inval
+
+
 class Pn(Pattern):
     def __init__(self, val, repeats=1):
         Pattern.__init__(self)
@@ -257,10 +285,9 @@ class Pn(Pattern):
 
     # this is equivalent to the embedInStream function
     def generator(self, rout):
-        counter = 0
         reps = patvalue(self.repeats)
         for _ in range(reps):
-                yield embedInStream(rout, self.val)
+            yield embedInStream(rout, self.val)
         yield None
         yield rout.inval
 

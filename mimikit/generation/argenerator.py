@@ -8,9 +8,12 @@ from .pbind import Event
 Event.default_parent = {'n_frames': lambda ev: round(ev['dur'] * ev['srate'] / ev['hop_size']),
                         'start_frame': lambda ev: round(ev['start'] * ev['srate'] / ev['hop_size']),
                         'srate': 22050,
+                        'blend_nbr': 0.0,
                         'hop_size': 512
                         }
 
+# it would be interesting to be able to switch models based on some
+# kind of onset detection
 
 class AREnsembleGenerator:
     """
@@ -18,7 +21,9 @@ class AREnsembleGenerator:
     The class uses Pbind patterns to control the model selection and generation parameters.
     """
 
-    def __init__(self, models, prompt_data, max_time, pattern, device='cpu', tensor_api='torch', prepad=16):
+    def __init__(self, models, prompt_data,
+                 max_time, pattern,
+                 device='cpu', tensor_api='torch', prepad=16):
         """
         Parameters
         ----------
@@ -44,12 +49,14 @@ class AREnsembleGenerator:
             self.noise_fn = torch.randn
             self.cat_fn = lambda x: torch.cat(x, 1)
             self.convert_fn = lambda x: torch.from_numpy(x).unsqueeze(0).to(self.device)
+            self.zero_fn = torch.zeros
             # Prepend zeros to ensure there is enough data independent
             # of the prompt size.  This is not ideal, but avoids having to
             # check whether enough data is available at every generation step.
             self.output = torch.zeros((1, prepad, prompt_data.shape[-1]), dtype=torch.float32).to(device)
         elif tensor_api == 'numpy':
             self.noise_fn = np.randn
+            self.zero_fn = np.zeros
             self.cat_fn = lambda x: np.concatenate(x, axis=1)
             self.convert_fn = lambda x: x
             self.output = np.zeros((1, prepad, prompt_data.shape[-1]), dtype=np.float32)
@@ -59,7 +66,7 @@ class AREnsembleGenerator:
             m.eval()
             m.to(device)
 
-    def generate(self, time_domain=True, hop_size=512, start_event = Event({})):
+    def generate(self, time_domain=True, hop_size=512, start_event=Event({})):
         stream = self.pattern.asStream()
         while self.time < self.max_time:
             event = stream.next(start_event)
@@ -70,8 +77,8 @@ class AREnsembleGenerator:
 
     def insert(self, event):
         n_frames = event.value('n_frames')
-        frames = event['data']
-        self.output = self.cat_fn([self.output, self.convert_fn(frames)])
+        data = event['data']
+        self.output = self.cat_fn([self.output, self.convert_fn(data)])
         self.time += n_frames * event['hop_size'] / event['srate']
 
     def rest(self, event):
@@ -83,8 +90,31 @@ class AREnsembleGenerator:
     def prompt(self, event):
         n_frames = event.value('n_frames')
         start_frame = event.value('start_frame')
-        data = event['data'][start_frame:start_frame + n_frames]
+        data = event['data']
+        if data is None:
+            data = self.prompt_data
+        data = data[start_frame:start_frame + n_frames]
         self.output = self.cat_fn([self.output, self.convert_fn(data)])
+        self.time += n_frames * event['hop_size'] / event['srate']
+
+    def original(self, event):
+        # insert a piece of the orginal data into the output
+        # if nbrs are used select the starting point by finding
+        # nearest neighbor
+        n_frames = event.value('n_frames')
+        nbrs = event['nbrs']
+        data = event['data']
+        if data is None:
+            data = self.prompt_data
+        if nbrs:
+            cur_frame = self.output[0, -1:]
+            _, inds = nbrs.kneighbors(cur_frame)
+            inds = inds[0, 0] + 1
+            inds = np.clip(inds, 0, data.shape[0] - n_frames)
+            data = data[inds:inds + n_frames]
+            self.output = self.cat_fn([self.output, self.convert_fn(data)])
+        else:
+            print("event type original needs to have nbrs.")
         self.time += n_frames * event['hop_size'] / event['srate']
 
     def model(self, event):
@@ -92,13 +122,67 @@ class AREnsembleGenerator:
         model_num = event['model']
         decay = event['decay'] or 1.0
         noise = event['noise']
-        interpolate = event['interpolate']
+        interpolate = event['interpolate'] or 1
         repeat = event['repeat']
+        blend_nbr = event['blend_nbr']
+
+        # in case we have multiple models (a list or tuple in model_num)  we blend them
+        # the noise parameter is currently ignored when blending
+        if hasattr(model_num, "__len__"):
+            # maybe not the best solution: just set blend to make
+            # a compromise between averaging and just adding.
+            # there is no specific reason for the choice of [0.9, 0.9]
+            blend = event['blend'] or [0.9, 0.9]
+            frame_num = 0
+            # dists, inds = self.nbrs.kneighbors(x)
+            with torch.no_grad():
+                while frame_num < n_frames:
+                    model = self.models[model_num[0] % len(self.models)]
+                    in_slice, out_slice = model.generation_slices()
+                    next_input = self.output[:, in_slice]
+                    next_frame = model(next_input)[:, out_slice] * blend[0]
+                    for bi, m in enumerate(model_num[1:]):
+                        model = self.models[m % len(self.models)]
+                        in_slice, out_slice = model.generation_slices()
+                        next_input = self.output[:, in_slice]
+                        next_frame += model(next_input)[:, out_slice] * blend[bi + 1]
+                    next_frame = next_frame * decay
+                    if blend_nbr > 0.0:
+                        nbrs = event['nbrs']
+                        data = event['data']
+                        _, inds = nbrs.kneighbors(next_frame[0])
+                        inds = inds[0, 0]
+                        next_frame += blend_nbr * (self.convert_fn(data[inds:inds+1]) - next_frame)
+                    if interpolate > 1:
+                        cur_frame = self.output[:, -1:]
+                        left = round(n_frames - frame_num)
+                        n = min(left, interpolate)
+                        for k in range(n):
+                            frac = (k + 1) / interpolate
+                            frame = frac * next_frame + (1.0 - frac) * cur_frame
+                            self.output = self.cat_fn([self.output, frame])
+                        frame_num += n
+                    elif repeat:
+                        left = round(n_frames - frame_num)
+                        n = min(left, interpolate)
+                        for k in range(n):
+                            self.output = self.cat_fn([self.output, next_frame])
+                        frame_num += n
+                    else:
+                        self.output = self.cat_fn([self.output, next_frame])
+                        frame_num += 1
+                self.time += n_frames * event['hop_size'] / event['srate']
+                print(n_frames, self.time)
+            return self
+
+        ################################################################################
+        # code only reached when not blending models
+        ################################################################################
+
         model = self.models[model_num % len(self.models)]
         in_slice, out_slice = model.generation_slices()
-        print('model generate', n_frames, in_slice)
 
-        if interpolate or repeat:
+        if (interpolate > 1) or repeat:
             frame_num = 0
             with torch.no_grad():
                 while frame_num < n_frames:
@@ -108,6 +192,12 @@ class AREnsembleGenerator:
                     else:
                         noise_sig = 0.0
                     next_frame = model(next_input + noise_sig)[:, out_slice] * decay
+                    if blend_nbr > 0.0:
+                        nbrs = event['nbrs']
+                        data = event['data']
+                        _, inds = nbrs.kneighbors(next_frame[0])
+                        inds = inds[0, 0]
+                        next_frame += blend_nbr * (self.convert_fn(data[inds:inds+1]) - next_frame)
                     if interpolate:
                         cur_frame = self.output[:, -1:]
                         left = round(n_frames - frame_num)
@@ -129,12 +219,24 @@ class AREnsembleGenerator:
                     next_input = self.output[:, in_slice]
                     noise_sig = self.noise_fn(next_input.shape) * noise
                     next_frame = model(next_input + noise_sig)[:, out_slice] * decay
+                    if blend_nbr > 0.0:
+                        nbrs = event['nbrs']
+                        data = event['data']
+                        _, inds = nbrs.kneighbors(next_frame[0])
+                        inds = inds[0, 0]
+                        next_frame += blend_nbr * (self.convert_fn(data[inds:inds+1]) - next_frame)
                     self.output = self.cat_fn([self.output, next_frame])
         else:
             with torch.no_grad():
                 for n in range(n_frames):
                     next_input = self.output[:, in_slice]
                     next_frame = model(next_input)[:, out_slice] * decay
+                    if blend_nbr > 0.0:
+                        nbrs = event['nbrs']
+                        data = event['data']
+                        _, inds = nbrs.kneighbors(next_frame[0])
+                        inds = inds[0, 0]
+                        next_frame += blend_nbr * (self.convert_fn(data[inds:inds+1]) - next_frame)
                     self.output = self.cat_fn([self.output, next_frame])
 
         self.time += n_frames * event['hop_size'] / event['srate']
