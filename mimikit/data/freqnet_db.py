@@ -41,7 +41,7 @@ def freqnet_db(target,
                n_fft=2048,
                hop_length=512,
                sample_rate=22050,
-               neptune_path=None
+               neptune_path=None,
                transform_function=file_to_fft):
     """
     transform found multichannel audio files to STFTs with specified parameters and put
