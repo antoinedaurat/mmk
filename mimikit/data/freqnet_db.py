@@ -79,7 +79,7 @@ def freqnet_db(target,
     """
     namespace = argparse.Namespace(target=target, roots=roots, files=files, n_fft=n_fft,
                                    hop_length=hop_length, sample_rate=sample_rate,
-                                   neptune_path=neptune_path)
+                                   neptune_path=neptune_path, transform_function=transform_function)
     main(namespace)
     return Database(target)
 
