@@ -159,6 +159,9 @@ class FreqNetModel(MMKHooks,
                              "FreqNetModel.load_from_checkpoint(path_to_ckpt, data_object=my_data_object)")
         self.optim = FreqOptim(self, max_lr, betas, div_factor, final_div_factor, pct_start,
                                cycle_momentum)
+        # This fields can be set in a FreqNet subclass
+        self.consistency_loss = 0
+        self.consistency_measure = None
         # calling this updates self.hparams from any subclass : call it when subclassing!
         self.save_hyperparameters()
 
@@ -166,7 +169,13 @@ class FreqNetModel(MMKHooks,
         batch, target = batch
         output = self.forward(batch)
         recon = self.loss_fn(output, target)
-        return {"loss": recon}
+        # regularization by STFT consistency measure
+        if self.consistency_measure is not None:
+            consistency = self.consistency_loss * torch.mean(self.consistency_measure(output))
+            res = {"loss": recon + consistency, "consistency": consistency}
+        else:
+            res = {"loss": recon}
+        return res
 
     def validation_step(self, batch, batch_idx):
         batch, target = batch

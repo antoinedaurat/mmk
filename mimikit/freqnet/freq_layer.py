@@ -50,6 +50,7 @@ class FreqLayer(nn.Module):
                  learn_padding=False,
                  with_skip_conv=False,
                  with_residual_conv=False,
+
                  ):
         super(FreqLayer, self).__init__()
         self.layer_index = layer_index

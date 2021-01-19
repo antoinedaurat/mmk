@@ -22,6 +22,8 @@ class FreqNet(FreqNetModel):
                  learn_padding=False,
                  with_skip_conv=True,
                  with_residual_conv=True,
+                 consistency_measure=None,
+                 consistency_loss=0.01,
                  **data_optim_kwargs):
         super(FreqNet, self).__init__(**data_optim_kwargs)
         self._loss_fn = loss_fn
@@ -35,6 +37,8 @@ class FreqNet(FreqNetModel):
         self.learn_padding = learn_padding
         self.with_skip_conv = with_skip_conv
         self.with_residual_conv = with_residual_conv
+        self.consistency_loss = consistency_loss
+        self.consistency_measure = consistency_measure
 
         # Input Encoder
         self.inpt = GatedLinearInput(self.input_dim, self.model_dim)
