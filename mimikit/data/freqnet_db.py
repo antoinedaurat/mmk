@@ -41,10 +41,12 @@ def freqnet_db(target,
                n_fft=2048,
                hop_length=512,
                sample_rate=22050,
-               neptune_path=None):
+               neptune_path=None
+               transform_function=file_to_fft):
     """
-    transform found audio files to STFTs with specified parameters and put
-    them in a .h5 ``Database``
+    transform found multichannel audio files to STFTs with specified parameters and put
+    them in a .h5 ``Database``.  The STFTs of the channels are concatenated in the
+    frequency axis.
 
     Parameters
     ----------
@@ -87,7 +89,7 @@ def main(namespace=None):
         args = parser.parse_args()
     else:
         args = namespace
-    transform = partial(file_to_fft,
+    transform = partial(args.transform_function,
                         n_fft=args.n_fft,
                         hop_length=args.hop_length,
                         sr=args.sample_rate)

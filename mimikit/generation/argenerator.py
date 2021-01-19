@@ -5,6 +5,9 @@ import numpy as np
 from .pbind import Event
 
 
+# Maybe it would be better to set the hop_size by some other means.
+# This is prone to errors if you don't set the hop_size to the size
+# wich which the data for a given model was prepared
 Event.default_parent = {'n_frames': lambda ev: round(ev['dur'] * ev['srate'] / ev['hop_size']),
                         'start_frame': lambda ev: round(ev['start'] * ev['srate'] / ev['hop_size']),
                         'srate': 22050,
