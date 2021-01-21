@@ -38,7 +38,7 @@ class FreqOptim:
         # those are set in setup when we know what the trainer and datamodule got
         self.steps_per_epoch = None
         self.max_epochs = None
-        self.weight_decay
+        self.weight_decay = weight_decay
 
     def configure_optimizers(self):
         self.opt = torch.optim.Adam(self.model.parameters(), lr=self.max_lr, betas=self.betas, weight_decay=self.weight_decay)
