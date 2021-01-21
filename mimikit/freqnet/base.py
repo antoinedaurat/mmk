@@ -171,7 +171,7 @@ class FreqNetModel(MMKHooks,
         recon = self.loss_fn(output, target)
         # regularization by STFT consistency measure
         if self.consistency_measure is not None:
-            consistency = torch.mean(self.consistency_measure(output, target))
+            consistency = torch.mean(self.consistency_measure(output, batch))
             res = {"loss": recon + self.consistency_loss * consistency, "consistency": consistency}
         else:
             res = {"loss": recon}
