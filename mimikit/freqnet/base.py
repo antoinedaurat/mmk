@@ -26,7 +26,8 @@ class FreqOptim:
                  div_factor=3.,
                  final_div_factor=1.,
                  pct_start=.25,
-                 cycle_momentum=False):
+                 cycle_momentum=False,
+                 weight_decay=0):
         self.model = model
         self.max_lr = max_lr
         self.betas = betas
@@ -39,7 +40,7 @@ class FreqOptim:
         self.max_epochs = None
 
     def configure_optimizers(self):
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=self.max_lr, betas=self.betas)
+        self.opt = torch.optim.Adam(self.model.parameters(), lr=self.max_lr, betas=self.betas, weight_decay=weight_decay)
         self.sched = ManyOneCycleLR(self.opt,
                                     steps_per_epoch=self.steps_per_epoch,
                                     epochs=self.max_epochs,
@@ -146,6 +147,7 @@ class FreqNetModel(MMKHooks,
                  final_div_factor=1.,
                  pct_start=.25,
                  cycle_momentum=False,
+                 weight_decay=0,
                  **loaders_kwargs):
         super(FreqNetModel, self).__init__()
         # dimensionality of inputs is automatically available
@@ -158,7 +160,7 @@ class FreqNetModel(MMKHooks,
                              " If you are loading from a checkpoint, you can do so by modifying your method call to :\n"
                              "FreqNetModel.load_from_checkpoint(path_to_ckpt, data_object=my_data_object)")
         self.optim = FreqOptim(self, max_lr, betas, div_factor, final_div_factor, pct_start,
-                               cycle_momentum)
+                               cycle_momentum, weight_decay)
         # This fields can be set in a FreqNet subclass
         self.consistency_loss = 0
         self.consistency_measure = None
