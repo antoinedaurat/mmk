@@ -153,7 +153,7 @@ class FreqNetModel(MMKHooks,
         super(FreqNetModel, self).__init__()
         # dimensionality of inputs is automatically available
         if data_object is not None and not isinstance(data_object, str):
-            self.input_dim = data_object.shape[-1]
+            self.input_dim = self.get_input_dim(data_object);
             self.datamodule = FreqData(self, data_object, input_seq_length, batch_size,
                                        to_gpu, splits, **loaders_kwargs)
         else:
@@ -167,6 +167,9 @@ class FreqNetModel(MMKHooks,
         self.consistency_measure = None
         # calling this updates self.hparams from any subclass : call it when subclassing!
         self.save_hyperparameters()
+
+    def get_input_dim(self, data_object):
+        return data_object.shape[-1]
 
     def training_step(self, batch, batch_idx):
         batch, target = batch
