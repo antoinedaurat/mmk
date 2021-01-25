@@ -48,7 +48,11 @@ class ShiftedSeqsPair(DSWrapper):
 
     def __call__(self, dataset: DataObject):
         # grab the number of time-steps BEFORE we upgrade
-        self.N = len(dataset.data)
+        if dataset._is_multi:
+            # in multi feature datasets the len has to be the same for all features
+            self.N = len(dataset.data[0])
+        else:
+            self.N = len(dataset.data)
         return super(ShiftedSeqsPair, self).__call__(dataset)
 
     def __len__(self):
