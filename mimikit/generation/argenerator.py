@@ -15,8 +15,13 @@ Event.default_parent = {'n_frames': lambda ev: round(ev['dur'] * ev['srate'] / e
                         'hop_size': 512
                         }
 
+# Further ideas to implement:
 # it would be interesting to be able to switch models based on some
 # kind of onset detection
+#
+# event type 'choke' which tries by some way to push the model into decay
+# and go into silence - this cannot work with all models but might work 
+# on some.
 
 class AREnsembleGenerator:
     """
@@ -52,11 +57,11 @@ class AREnsembleGenerator:
             self.noise_fn = torch.randn
             self.cat_fn = lambda x: torch.cat(x, 1)
             self.convert_fn = lambda x: torch.from_numpy(x).unsqueeze(0).to(self.device)
-            self.zero_fn = torch.zeros
+            self.zero_fn = lambda x: torch.zeros(x).to(self.device)
             # Prepend zeros to ensure there is enough data independent
             # of the prompt size.  This is not ideal, but avoids having to
             # check whether enough data is available at every generation step.
-            self.output = torch.zeros((1, prepad, prompt_data.shape[-1]), dtype=torch.float32).to(device)
+            self.output = torch.zeros((1, prepad, prompt_data.shape[-1]), dtype=torch.float32).to(self.device)
         elif tensor_api == 'numpy':
             self.noise_fn = np.randn
             self.zero_fn = np.zeros
@@ -67,7 +72,20 @@ class AREnsembleGenerator:
             print('tensor_api has to be numpy or torch')
         for m in self.models:
             m.eval()
-            m.to(device)
+            m.to(self.device)
+
+    # def multi_fftsize_generate(self, hop_size=512, start_event=Event({})):
+    #     out_sig = np.array([], dtype=np.float32)
+    #     stream = self.pattern.asStream()
+    #     n_bins = 0
+    #     while self.time < self.max_time:
+    #         event = stream.next(start_event)
+    #         if event['n_bins'] != n_bins:
+    #             n_bins = event['n_bins']
+    #         event_type = event['type']
+    #         getattr(self, event_type)(event)
+    #     out_sig = np.concatenate([out_sig, librosa.griffinlim(self.output.cpu().numpy()[0].T, 64, hop_size)])
+    #     return res
 
     def generate(self, time_domain=True, hop_size=512, start_event=Event({})):
         stream = self.pattern.asStream()
