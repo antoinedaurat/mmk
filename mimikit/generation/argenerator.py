@@ -54,7 +54,7 @@ class AREnsembleGenerator:
         self.max_time = max_time
         self.num_bins = prompt_data.shape[-1]
         if tensor_api == 'torch':
-            self.noise_fn = torch.randn
+            self.noise_fn = lambda x: torch.randn(x).to(self.device)
             self.cat_fn = lambda x: torch.cat(x, 1)
             self.convert_fn = lambda x: torch.from_numpy(x).unsqueeze(0).to(self.device)
             self.zero_fn = lambda x: torch.zeros(x).to(self.device)
