@@ -117,7 +117,7 @@ class ConditionedFreqNet(FreqNet):
 
     def validation_step(self, batch, batch_idx):
         batch, env, target = batch
-        output = self.forward(batch)
+        output = self.forward(batch, env)
         recon = self.loss_fn(output, target)
         return {"val_loss": recon}
 
