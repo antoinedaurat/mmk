@@ -106,7 +106,6 @@ class ConditionedFreqNet(FreqNet):
     def training_step(self, batch, batch_idx):
         batch, target, env = batch
         output = self.forward(batch, env)
-        print(output.shape, target.shape)
         recon = self.loss_fn(output, target)
         # regularization by STFT consistency measure
         if self.consistency_measure is not None:
