@@ -60,6 +60,7 @@ class ConditionedFreqNet(FreqNet):
                  with_residual_conv=True,
                  consistency_measure=None,
                  consistency_loss=0.01,
+                 condition_bias=False,
                  **data_optim_kwargs):
         super(FreqNet, self).__init__(**data_optim_kwargs)
         self._loss_fn = loss_fn
@@ -67,6 +68,7 @@ class ConditionedFreqNet(FreqNet):
         self.groups = groups
         self.n_layers = n_layers
         self.strict = strict
+        self.condition_bias = condition_bias
         self.accum_outputs = accum_outputs
         self.concat_outputs = concat_outputs
         self.pad_input = pad_input
@@ -78,7 +80,7 @@ class ConditionedFreqNet(FreqNet):
 
         # Input Encoder
         self.inpt = GatedLinearInput(self.input_dim, self.model_dim)
-        self.env_inpt = nn.Linear(1, self.model_dim)
+        self.env_inpt = nn.Linear(1, self.model_dim, bias=self.condition_bias)
 
         # Auto-regressive Part
         layer_kwargs = {attr: getattr(self, attr) for attr in self.LAYER_KWARGS}
