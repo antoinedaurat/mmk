@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import librosa
 from abc import ABC
 
-from ..data import DataObject, FeatureProxy, HOP_LENGTH
+from ..data import DataObj, SequenceSlicer, FeatureProxy, HOP_LENGTH
 from ..kit import ShiftedSeqsPair, MMKHooks, LoggingHooks, tqdm
 
 
@@ -65,7 +65,7 @@ class FreqData(LightningDataModule):
                  ):
         super(FreqData, self).__init__()
         self.model = model
-        self.ds = DataObject(data_object)
+        self.ds = data_object
         self.input_seq_length = input_seq_length
         self.batch_size = batch_size
         self.to_gpu = to_gpu
@@ -75,13 +75,15 @@ class FreqData(LightningDataModule):
         self.loader_kwargs = loader_kwargs
         self.train_ds, self.val_ds, self.test_ds = None, None, None
 
+    def get_input_dim(self, data_object):
+        return self.ds[-1]
+
     def prepare_data(self, *args, **kwargs):
         if not (getattr(self.model, "targets_shifts_and_lengths", False)):
             raise TypeError("Expected `model` to implement `targets_shifts_and_lengths(input_length)`"
                             " in order to compute the right slices for the batches")
         targets_def = self.model.targets_shifts_and_lengths(self.input_seq_length)
-        wrapper = ShiftedSeqsPair(self.input_seq_length, targets_def)
-        self.ds = wrapper(self.ds)
+        self.ds = SequenceSlicer([(self.input_seq_length, 0)] + targets_def, self.ds)
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -131,6 +133,8 @@ class FreqNetModel(MMKHooks,
                    LightningModule,
                    ABC):
 
+    data_class = FreqData
+
     @property
     def data(self):
         """short-hand to quickly access the data object passed to the constructor"""
@@ -153,9 +157,9 @@ class FreqNetModel(MMKHooks,
         super(FreqNetModel, self).__init__()
         # dimensionality of inputs is automatically available
         if data_object is not None and not isinstance(data_object, str):
-            self.input_dim = self.get_input_dim(data_object);
-            self.datamodule = FreqData(self, data_object, input_seq_length, batch_size,
-                                       to_gpu, splits, **loaders_kwargs)
+            self.datamodule = self.data_class(self, data_object, input_seq_length, batch_size,
+                                              to_gpu, splits, **loaders_kwargs)
+            self.input_dim = self.datamodule.get_input_dim(data_object)
         else:
             raise ValueError("Please pass a valid data_object to instantiate a FreqNetModel."
                              " If you are loading from a checkpoint, you can do so by modifying your method call to :\n"
@@ -167,9 +171,6 @@ class FreqNetModel(MMKHooks,
         self.consistency_measure = None
         # calling this updates self.hparams from any subclass : call it when subclassing!
         self.save_hyperparameters()
-
-    def get_input_dim(self, data_object):
-        return data_object.shape[-1]
 
     def training_step(self, batch, batch_idx):
         batch, target = batch
